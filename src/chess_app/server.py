@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from assignment.chess_app.game import ChessGame, InvalidMoveError
+from chess_app.game import ChessGame, InvalidMoveError
 
 
 STATIC_DIR = Path(__file__).with_name("static")
