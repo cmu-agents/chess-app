@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="A minimal human-versus-agent chess board." />
+    <title>Sandbox Chess</title>
+    <link rel="stylesheet" href="/static/styles.css?v=9" />
+  </head>
+  <body>
+    <main class="chess-stage">
+      <section class="game" aria-label="Chess game">
+        <div class="game-bar">
+          <div class="status-pill" aria-live="polite">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span id="game-status">Your turn</span>
+          </div>
+          <button id="new-game" class="reset-button" type="button" aria-label="New game" title="New game">↻</button>
+        </div>
+
+        <div class="board-frame">
+          <div class="board-bevel">
+            <div id="board" class="board" role="grid" aria-label="Chess board"></div>
+          </div>
+          <div id="game-result" class="game-result" role="status" aria-live="assertive" hidden>
+            <div class="result-card">
+              <span id="result-reason" class="result-reason">Checkmate</span>
+              <strong id="result-title" class="result-title">You lost</strong>
+              <button id="play-again" class="play-again-button" type="button">Play again</button>
+            </div>
+          </div>
+        </div>
+
+        <p id="error-message" class="error-message" role="alert"></p>
+      </section>
+    </main>
+
+    <script src="/static/app.js?v=5" defer></script>
+  </body>
+</html>
