@@ -19,7 +19,6 @@ PIECE_VALUES = {
 }
 
 CENTER_SQUARES = {chess.D4, chess.E4, chess.D5, chess.E5}
-OPENING_PREFERENCES = ("e7e5", "d7d5", "c7c5", "g8f6")
 
 
 class InvalidMoveError(ValueError):
@@ -75,9 +74,10 @@ class ChessGame:
             human_state = self._state_unlocked()
 
             engine_move: str | None = None
-            reply = self._choose_engine_move()
-            engine_move = reply.uci()
-            self._record_and_push(reply)
+            if self._board.outcome(claim_draw=True) is None:
+                reply = self._choose_engine_move()
+                engine_move = reply.uci()
+                self._record_and_push(reply)
 
             state = self._state_unlocked()
             state["human_move"] = move.uci()
@@ -110,40 +110,54 @@ class ChessGame:
         self._last_move = move
 
     def _choose_engine_move(self) -> chess.Move:
-        legal_moves = sorted(self._board.legal_moves, key=lambda move: move.uci())
+        # Search on an isolated board so speculative moves can never leak into
+        # the real game observed by the API.
+        search_board = self._board.copy(stack=False)
+        legal_moves = sorted(search_board.legal_moves, key=lambda move: move.uci())
         if not legal_moves:
             raise RuntimeError("The engine was asked to move in a terminal position.")
 
-        if self._board.fullmove_number == 1:
-            by_uci = {move.uci(): move for move in legal_moves}
-            for preferred in OPENING_PREFERENCES:
-                if preferred in by_uci:
-                    return by_uci[preferred]
-
         best_move = legal_moves[0]
         best_score = float("-inf")
+        alpha = float("-inf")
+        beta = float("inf")
         for move in legal_moves:
-            self._board.push(move)
-            score = self._minimax(self.engine_depth - 1)
-            self._board.pop()
+            before_search = search_board.fen()
+            search_board.push(move)
+            score = self._minimax(search_board, self.engine_depth - 1, alpha, beta)
+            search_board.pop()
+            if search_board.fen() != before_search:
+                raise RuntimeError("Engine search did not restore its working board.")
             if score > best_score:
                 best_score = score
                 best_move = move
+            alpha = max(alpha, best_score)
         return best_move
 
-    def _minimax(self, depth: int) -> float:
-        outcome = self._board.outcome(claim_draw=True)
+    def _minimax(self, board: chess.Board, depth: int, alpha: float, beta: float) -> float:
+        outcome = board.outcome(claim_draw=True)
         if depth <= 0 or outcome is not None:
-            return self._evaluate(outcome)
+            return self._evaluate(board, outcome)
 
-        scores: list[float] = []
-        for move in sorted(self._board.legal_moves, key=lambda item: item.uci()):
-            self._board.push(move)
-            scores.append(self._minimax(depth - 1))
-            self._board.pop()
-        return max(scores) if self._board.turn == chess.BLACK else min(scores)
+        maximizing = board.turn == chess.BLACK
+        best_score = float("-inf") if maximizing else float("inf")
+        for move in sorted(board.legal_moves, key=lambda item: item.uci()):
+            board.push(move)
+            score = self._minimax(board, depth - 1, alpha, beta)
+            if maximizing:
+                best_score = max(best_score, score)
+                alpha = max(alpha, best_score)
+            else:
+                best_score = min(best_score, score)
+                beta = min(beta, best_score)
 
-    def _evaluate(self, outcome: chess.Outcome | None) -> float:
+            # No unexplored sibling can change the result after this cutoff.
+            if beta <= alpha:
+                break
+            board.pop()
+        return best_score
+
+    def _evaluate(self, board: chess.Board, outcome: chess.Outcome | None) -> float:
         if outcome is not None:
             if outcome.winner == chess.BLACK:
                 return 100_000
@@ -152,14 +166,14 @@ class ChessGame:
             return 0
 
         score = 0.0
-        for square, piece in self._board.piece_map().items():
+        for square, piece in board.piece_map().items():
             value = PIECE_VALUES[piece.piece_type]
             score += value if piece.color == chess.BLACK else -value
             if square in CENTER_SQUARES:
                 score += 12 if piece.color == chess.BLACK else -12
 
-        if self._board.is_check():
-            score += 25 if self._board.turn == chess.WHITE else -25
+        if board.is_check():
+            score += 25 if board.turn == chess.WHITE else -25
         return score
 
     def _state_unlocked(self) -> dict[str, Any]:
