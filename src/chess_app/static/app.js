@@ -36,11 +36,14 @@ let selectedSquare = null;
 let busy = false;
 let busyStatus = "Thinking…";
 let interactionStatus = null;
+let pollInFlight = false;
+
+const POLL_INTERVAL_MS = 1500;
 
 const boardElement = document.querySelector("#board");
 const boardFrameElement = document.querySelector(".board-frame");
 const statusElement = document.querySelector("#game-status");
-const newGameButton = document.querySelector("#new-game");
+const refreshButton = document.querySelector("#refresh-game");
 const gameResultElement = document.querySelector("#game-result");
 const resultReasonElement = document.querySelector("#result-reason");
 const resultTitleElement = document.querySelector("#result-title");
@@ -225,7 +228,7 @@ function render() {
   renderBoard();
   renderResult();
   statusElement.textContent = busy ? busyStatus : interactionStatus || state.status;
-  newGameButton.disabled = busy;
+  refreshButton.disabled = busy;
 }
 
 async function handleSquareClick(squareName) {
@@ -292,6 +295,23 @@ async function submitMove(move) {
   }
 }
 
+async function refreshGame() {
+  busy = true;
+  busyStatus = "Refreshing…";
+  selectedSquare = null;
+  interactionStatus = null;
+  errorElement.textContent = "";
+  render();
+  try {
+    state = await request("/api/state");
+  } catch (error) {
+    errorElement.textContent = error.message;
+  } finally {
+    busy = false;
+    render();
+  }
+}
+
 async function startNewGame() {
   busy = true;
   busyStatus = "Starting…";
@@ -309,7 +329,27 @@ async function startNewGame() {
   }
 }
 
-newGameButton.addEventListener("click", startNewGame);
+async function pollGameState() {
+  if (busy || pollInFlight || document.hidden) return;
+  pollInFlight = true;
+  try {
+    const nextState = await request("/api/state");
+    const connectionRecovered = statusElement.textContent === "Offline";
+    if (!state || nextState.fen !== state.fen || connectionRecovered) {
+      state = nextState;
+      selectedSquare = null;
+      interactionStatus = null;
+      errorElement.textContent = "";
+      render();
+    }
+  } catch (_) {
+    statusElement.textContent = "Offline";
+  } finally {
+    pollInFlight = false;
+  }
+}
+
+refreshButton.addEventListener("click", refreshGame);
 playAgainButton.addEventListener("click", startNewGame);
 
 async function initialize() {
@@ -323,3 +363,4 @@ async function initialize() {
 }
 
 initialize();
+window.setInterval(pollGameState, POLL_INTERVAL_MS);
