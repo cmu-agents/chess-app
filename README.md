@@ -18,6 +18,11 @@ chess-server --host 0.0.0.0 --port 8000
 
 `--host` and `--port` also read the `CHESS_HOST` and `PORT` environment variables.
 
+The browser polls the current game every 1.5 seconds, so it can be used to
+monitor an external agent. The top-right button refreshes the board without
+resetting the server-side game; a new game can be started after a terminal
+result.
+
 ## Test
 
 ```
